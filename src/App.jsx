@@ -8,8 +8,8 @@ const ADMIN_PASSWORD = "recall2025";
 // Supabase keys come from environment variables you set in Vercel.
 // If they are not set the game still works — analytics just won't record.
 // ⬇️ PASTE YOUR SUPABASE VALUES HERE (both are safe to include in frontend code)
-const SUPA_URL = "https://oiavrpcblwrzskehhlow.supabase.co";   // e.g. https://abcdefgh.supabase.co
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pYXZycGNibHdyenNrZWhobG93Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwNzY1ODMsImV4cCI6MjEwMDY1MjU4M30.TrtqrkiB5qiKmb4z9OXqvre4tZZV7-Kc_5Bm-_hIIt4";       // starts with eyJ...
+const SUPA_URL = "PASTE_YOUR_PROJECT_URL_HERE";   // e.g. https://abcdefgh.supabase.co
+const SUPA_KEY = "PASTE_YOUR_ANON_KEY_HERE";       // starts with eyJ...
 const ANALYTICS_ON = SUPA_URL.length > 0 && SUPA_KEY.length > 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,6 +44,17 @@ async function fetchStats() {
   try {
     const res = await fetch(
       `${SUPA_URL}/rest/v1/events?select=*&order=created_at.desc&limit=5000`,
+      { headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}` } }
+    );
+    return await res.json();
+  } catch { return null; }
+}
+
+async function fetchTodayStats(challengeDay) {
+  if (!ANALYTICS_ON) return null;
+  try {
+    const res = await fetch(
+      `${SUPA_URL}/rest/v1/events?select=*&challenge_day=eq.${challengeDay}`,
       { headers: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}` } }
     );
     return await res.json();
@@ -342,6 +353,7 @@ export default function App() {
   const [started, setStarted]     = useState(false);
   const [locked, setLocked]       = useState(false);
   const [result, setResult]       = useState(null);
+  const [liveStats, setLiveStats] = useState(null);
   const [confetti, setConfetti]   = useState(false);
   const [copied, setCopied]       = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -383,8 +395,27 @@ export default function App() {
                   setElapsed(e=>{ setMoves(mv=>{
                     const fm=mv+1;
                     track("complete",ch,{time_secs:e,moves:fm});
-                    const stats=simulateStats(ch,e,fm);
-                    setResult({time:e,moves:fm,stats});
+                    const simStats=simulateStats(ch,e,fm);
+                    setResult({time:e,moves:fm,stats:simStats});
+                    // fetch real stats from Supabase and replace simulated ones
+                    const day=new Date().toISOString().slice(0,10);
+                    fetchTodayStats(day).then(rows=>{
+                      if(!rows||!Array.isArray(rows)) return;
+                      const completes=rows.filter(r=>r.event==="complete");
+                      const times=completes.map(r=>r.time_secs).filter(Boolean);
+                      const movesArr=completes.map(r=>r.moves).filter(Boolean);
+                      const avg=arr=>arr.length?Math.round(arr.reduce((a,b)=>a+b,0)/arr.length):0;
+                      if(times.length===0) return; // not enough data yet, keep simulated
+                      const timePct=Math.round(times.filter(t=>t>e).length/times.length*100);
+                      const movesPct=movesArr.length?Math.round(movesArr.filter(m=>m>fm).length/movesArr.length*100):50;
+                      setLiveStats({
+                        total: rows.filter(r=>r.event==="start").length,
+                        completions: completes.length,
+                        avgTime: avg(times), bestTime: Math.min(...times),
+                        avgMoves: avg(movesArr), bestMoves: movesArr.length?Math.min(...movesArr):fm,
+                        timePct, movesPct,
+                      });
+                    });
                     setConfetti(true); setTimeout(()=>setConfetti(false),4500);
                     setScreen("result"); return fm;
                   }); return e; });
@@ -456,7 +487,8 @@ export default function App() {
 
   // ── RESULT ─────────────────────────────────────────────────────────────────
   if(screen==="result"&&result){
-    const {stats}=result;
+    const stats = liveStats || result.stats;
+    const isLive = !!liveStats;
     return (
       <div style={{fontFamily:"system-ui,sans-serif",maxWidth:440,margin:"0 auto",padding:"20px 16px 44px"}}>
         {confetti&&<Confetti/>}
@@ -471,9 +503,20 @@ export default function App() {
           <StatBox icon="🎯" label="Moves" yours={result.moves} avgVal={stats.avgMoves} best={stats.bestMoves} pct={stats.movesPct}/>
         </div>
         <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"11px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>Players today</div><div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{stats.total}</div></div>
-          <div style={{textAlign:"right"}}><div style={{fontSize:11,color:"var(--color-text-secondary)"}}>Your speed rank</div><div style={{fontSize:20,fontWeight:700,color:"#3498DB"}}>Top {Math.max(1,100-stats.timePct)}%</div></div>
+          <div>
+            <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>Players today</div>
+            <div style={{fontSize:20,fontWeight:700,color:"var(--color-text-primary)"}}>{isLive ? stats.total : "—"}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:11,color:"var(--color-text-secondary)"}}>Your speed rank</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#3498DB"}}>{isLive ? `Top ${Math.max(1,100-stats.timePct)}%` : "—"}</div>
+          </div>
         </div>
+        {!isLive && ANALYTICS_ON && (
+          <p style={{textAlign:"center",fontSize:11,color:"var(--color-text-secondary)",marginBottom:10,opacity:.6}}>
+            Ranking updates as more players finish today's puzzle
+          </p>
+        )}
         <div style={{background:"var(--color-background-secondary)",borderRadius:12,padding:"13px",marginBottom:14}}>
           <p style={{fontSize:10,fontWeight:500,color:"var(--color-text-secondary)",textTransform:"uppercase",letterSpacing:".07em",margin:"0 0 8px"}}>Share your result</p>
           <pre style={{fontSize:12,color:"var(--color-text-primary)",whiteSpace:"pre-wrap",margin:0,fontFamily:"inherit",lineHeight:1.7}}>{shareText}</pre>
