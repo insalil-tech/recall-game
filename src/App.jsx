@@ -8,8 +8,8 @@ const ADMIN_PASSWORD = "recall2025";
 // Supabase keys come from environment variables you set in Vercel.
 // If they are not set the game still works — analytics just won't record.
 // ⬇️ PASTE YOUR SUPABASE VALUES HERE (both are safe to include in frontend code)
-const SUPA_URL = "PASTE_YOUR_PROJECT_URL_HERE";   // e.g. https://abcdefgh.supabase.co
-const SUPA_KEY = "PASTE_YOUR_ANON_KEY_HERE";       // starts with eyJ...
+const SUPA_URL = "https://oiavrpcblwrzskehhlow.supabase.co";   // e.g. https://abcdefgh.supabase.co
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pYXZycGNibHdyenNrZWhobG93Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUwNzY1ODMsImV4cCI6MjEwMDY1MjU4M30.TrtqrkiB5qiKmb4z9OXqvre4tZZV7-Kc_5Bm-_hIIt4";       // starts with eyJ...
 const ANALYTICS_ON = SUPA_URL.length > 0 && SUPA_KEY.length > 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
